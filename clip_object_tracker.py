@@ -8,6 +8,7 @@ from pathlib import Path
 
 import cv2
 import torch
+import pandas as pd
 
 import numpy as np
 
@@ -95,6 +96,8 @@ class DetectionAndTracking:
 
         # Set Dataloader
         self.vid_path, self.vid_writer = None, None
+
+        self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
         
 
     def detect(self, source, project, name, save_img=False):
@@ -138,9 +141,9 @@ class DetectionAndTracking:
                
                 p = Path(p)  # to Path
                 save_path = str(save_dir / p.name)  # img.jpg
-                txt_path = str(save_dir / 'labels' / p.stem) + \
-                    ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
-                
+                """txt_path = str(save_dir / 'labels' / p.stem) + \
+                    ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt"""
+                txt_path = None
                 # normalization gain whwh
                 gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]
                
@@ -192,11 +195,6 @@ class DetectionAndTracking:
                     else:
                         scores = np.array([d.confidence for d in detections])
                         class_nums = np.array([d.class_num for d in detections])
-
-                    """indices = preprocessing.non_max_suppression(
-                        boxs, class_nums, self.nms_max_overlap, scores)
-                    
-                    detections = [detections[i] for i in indices]"""
                     
                     # Call the tracker
                     self.tracker.predict()
@@ -235,8 +233,11 @@ class DetectionAndTracking:
                 self.frame_count = self.frame_count+1
 
         if self.save_txt:
-            s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if self.save_txt else ''
             base_path= os.path.join(save_dir, 'labels')
+            if not os.path.isdir(base_path):
+                os.makedirs(base_path)
+            """s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if self.save_txt else ''
+            
             filenames = os.listdir(base_path)
             with open(os.path.join(base_path, f'full_labels.txt'), 'w') as outfile:
                 for fname in filenames:
@@ -244,7 +245,8 @@ class DetectionAndTracking:
                     with open(fname) as infile:
                         for line in infile:
                             outfile.write(line)
-                    os.remove(fname)  
+                    os.remove(fname)"""
+            self.frames_detection_df.to_csv(os.path.join(base_path, f'full_labels.txt'))
             if self.opt.info: 
                 print(f"Results saved to {save_dir}{s}")
         if self.opt.info:
@@ -272,10 +274,16 @@ class DetectionAndTracking:
             if self.save_txt:  # Write to file
                 xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
 
-                with open(txt_path + '.txt', 'a') as f:
-                    f.write('frame: {}; track: {}; class: {}; bbox: {};\n'.format(self.frame_count, track.track_id, class_num,
-                                                                                (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
+                entry = pd.DataFrame.from_dict({
+                "frame": [self.frame_count],
+                "track":  [track.track_id],
+                "class": [class_num],
+                "bbox": [(int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))]
 
+                })
+
+                self.frames_detection_df = pd.concat([self.frames_detection_df, entry], ignore_index=True)
+                
             if save_img or self.view_img:  # Add bbox to image
                 label = f'{class_name} #{track.track_id}'
                 im0 = plot_one_box(xyxy, im0, label=label,
