@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from ast import literal_eval
 
 def bb_intersection_over_union(boxA, boxB):
     # determine the (x, y)-coordinates of the intersection rectangle
@@ -31,23 +30,27 @@ def bb_intersection_over_union(boxA, boxB):
 def jaccard_consecutive_frames(project_path, file_name, df):
     color_palette = plt.cm.get_cmap('Pastel1', 50)
     try:
-        df = df[df['class'].isin([" class: hummingbird"])==True]
+        df = df[df['class'].isin(["hummingbird"])==True]
         df = df.reset_index(drop=True)
-        #df = df.replace({"^\s*|\s*$":""}, regex=True)
         tracks = list(np.unique(df['track'].values))
+       
         jaccard_distance = []
         for track in tracks:
             df_track = df[df['track']==track]
             df_track = df_track.reset_index(drop=True)
+            iou_anterior = 0
             for idx in range(len(df_track)):
-                frame = int(df_track['frame'][idx].split(': ')[-1])
-                bbox_A=literal_eval(df_track['bbox'][idx].split(': ')[-1])
-                bbox_B=literal_eval(df_track['bbox'][idx+1].split(': ')[-1])
-                iou = bb_intersection_over_union(bbox_A, bbox_B)
-                jaccard_distance.append((track.split(': ')[-1], frame, iou))
+                frame = int(df_track['frame'][idx]) 
+                bbox_A=df_track['bbox'][idx]
+                bbox_B=df_track['bbox'][idx+1]
+                iou_actual = bb_intersection_over_union(bbox_A, bbox_B)
+                variance = abs(iou_actual - iou_anterior)
+                iou_anterior = iou_actual
+                 
+                jaccard_distance.append((track, frame, iou_actual, variance))
                 if idx>=len(df_track)-2:
                     break
-        jaccard_df = pd.DataFrame(jaccard_distance, columns=["track", "frame", "iou"])
+        jaccard_df = pd.DataFrame(jaccard_distance, columns=["track", "frame", "iou", "variance"])
         fig, ax = plt.subplots()
     
         for key, grp in jaccard_df.groupby(['track']):
@@ -62,3 +65,6 @@ def jaccard_consecutive_frames(project_path, file_name, df):
         return jaccard_df
     except:
         pass
+
+def marking_pauses_video(video, data_frame_info):
+    pass

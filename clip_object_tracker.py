@@ -18,7 +18,7 @@ from utils.plots import plot_one_box
 from utils.torch_utils import select_device, time_synchronized
 
 # deep sort imports
-from deep_sort import preprocessing, nn_matching
+from deep_sort import  nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 import generate_clip_detections as gdet
@@ -237,9 +237,10 @@ class DetectionAndTracking:
             base_path= os.path.join(save_dir, 'labels')
             if not os.path.isdir(base_path):
                 os.makedirs(base_path)
-            self.frames_detection_df['iou'] = np.nan
+
             jaccard_df = jaccard_consecutive_frames(save_dir,p.name, self.frames_detection_df)
-            self.frames_detection_df = pd.merge(self.frames_detection_df, jaccard_df, how="outer", on=["frame", "track"])
+          
+            self.frames_detection_df = self.frames_detection_df.merge(jaccard_df, how="outer", on=["frame", "track"])
             self.frames_detection_df.to_csv(os.path.join(base_path, f'full_labels.csv'))
 
             self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
