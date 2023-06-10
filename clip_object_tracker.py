@@ -202,7 +202,7 @@ class DetectionAndTracking:
                     self.tracker.update(detections)
 
                     # update tracks
-                    im0 = self.update_tracks(txt_path, save_img, im0, gn)
+                    im0 = self.update_tracks(save_img, im0, gn)
 
                 # Print time (inference + NMS)
                 #print(f'Done. ({t2 - t1:.3f}s)')
@@ -250,7 +250,7 @@ class DetectionAndTracking:
         if self.opt.info:
             print(f'Done. ({time.time() - t0:.3f}s)')
 
-    def update_tracks(self, txt_path, save_img, im0, gn):
+    def update_tracks(self, save_img, im0, gn):
         for track in self.tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue
