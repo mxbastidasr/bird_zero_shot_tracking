@@ -247,6 +247,8 @@ class DetectionAndTracking:
                             outfile.write(line)
                     os.remove(fname)"""
             self.frames_detection_df.to_csv(os.path.join(base_path, f'full_labels.txt'))
+            self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
+            
             if self.opt.info: 
                 print(f"Results saved to {save_dir}{s}")
         if self.opt.info:
