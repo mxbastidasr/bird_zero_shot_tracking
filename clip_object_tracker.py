@@ -246,9 +246,11 @@ class DetectionAndTracking:
                         for line in infile:
                             outfile.write(line)
                     os.remove(fname)"""
-            self.frames_detection_df.to_csv(os.path.join(base_path, f'full_labels.txt'))
-            self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
             
+            self.frames_detection_df.to_csv(os.path.join(base_path, f'full_labels.csv'))
+
+            self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
+
             if self.opt.info: 
                 print(f"Results saved to {save_dir}{s}")
         if self.opt.info:
@@ -280,8 +282,7 @@ class DetectionAndTracking:
                 "frame": [self.frame_count],
                 "track":  [track.track_id],
                 "class": [class_num],
-                "bbox": [(int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))]
-
+                "bbox": [(int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))],
                 })
 
                 self.frames_detection_df = pd.concat([self.frames_detection_df, entry], ignore_index=True)
