@@ -26,6 +26,7 @@ import generate_clip_detections as gdet
 from utils.yolov8 import Yolov8Engine
 from utils.yolonas import YoloNasEngine
 from clip_zero_shot_classifier import ClipClassifier
+from utils.jaccard_frames import jaccard_consecutive_frames
 
 classes = []
 
@@ -236,17 +237,7 @@ class DetectionAndTracking:
             base_path= os.path.join(save_dir, 'labels')
             if not os.path.isdir(base_path):
                 os.makedirs(base_path)
-            """s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if self.save_txt else ''
-            
-            filenames = os.listdir(base_path)
-            with open(os.path.join(base_path, f'full_labels.txt'), 'w') as outfile:
-                for fname in filenames:
-                    fname = os.path.join(base_path, fname)
-                    with open(fname) as infile:
-                        for line in infile:
-                            outfile.write(line)
-                    os.remove(fname)"""
-            
+            jaccard_consecutive_frames(save_dir,p.name)
             self.frames_detection_df.to_csv(os.path.join(base_path, f'full_labels.csv'))
 
             self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
