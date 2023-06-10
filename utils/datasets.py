@@ -13,7 +13,7 @@ img_formats = ['bmp', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'dng']  # acceptable 
 vid_formats = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # acceptable video suffixes
 
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=640):
+    def __init__(self, path, img_size=640, detection_engine='yolov8'):
         p = str(Path(path))  # os-agnostic
         p = os.path.abspath(p)  # absolute path
         if '*' in p:
@@ -34,6 +34,7 @@ class LoadImages:  # for inference
         self.nf = ni + nv  # number of files
         self.video_flag = [False] * ni + [True] * nv
         self.mode = 'image'
+        self.detection_engine = detection_engine
         if any(videos):
             self.new_video(videos[0])  # new video
         else:
@@ -74,13 +75,15 @@ class LoadImages:  # for inference
             assert img0 is not None, 'Image Not Found ' + path
             print('image %g/%g %s: ' % (self.count, self.nf, path), end='')
 
-        # Padded resize
-        img = letterbox(img0, new_shape=self.img_size)[0]
+        if self.detection_engine=='yolov8':
+            # Padded resize
+            img = letterbox(img0, new_shape=self.img_size)[0]
 
-        # Convert
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
-        img = np.ascontiguousarray(img)
-
+            # Convert
+            img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+            img = np.ascontiguousarray(img)
+        elif self.detection_engine=='yolonas':
+            img = img0
         return path, img, img0, self.cap
 
     def new_video(self, path):

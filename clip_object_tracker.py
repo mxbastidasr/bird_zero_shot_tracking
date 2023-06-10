@@ -23,7 +23,7 @@ from deep_sort.tracker import Tracker
 import generate_clip_detections as gdet
 
 from utils.yolov8 import Yolov8Engine
-
+from utils.yolonas import YoloNasEngine
 from clip_zero_shot_classifier import ClipClassifier
 
 classes = []
@@ -66,7 +66,7 @@ class DetectionAndTracking:
         
         self.model = ClipClassifier(device=self.device, labels=opt.clip_labels)
         
-        self.encoder = gdet.create_box_encoder(self.model)
+        self.encoder = gdet.create_box_encoder(self.model, model_name = opt.detection_engine)
         # calculate cosine distance metric
         self.metric = nn_matching.NearestNeighborDistanceMetric(
             "cosine", self.max_cosine_distance, self.nn_budget)
@@ -75,8 +75,13 @@ class DetectionAndTracking:
         if opt.detection_engine == "yolov8":
             self.yolov8_engine = Yolov8Engine(opt.weights, self.device, opt.classes, opt.confidence, opt.overlap, opt.agnostic_nms, opt.augment, self.half)
             self.names = self.yolov8_engine.get_names()
+        elif opt.detection_engine == "yolonas":
+            self.yolonas_engine = YoloNasEngine(opt.weights, self.device, opt.classes, opt.confidence, opt.overlap, opt.agnostic_nms, opt.augment, self.half)
+            self.names = self.yolonas_engine.get_names()
+
         elif opt.detection_engine == "clip":
             self.names = self.model.labels
+        
         else:
             raise(f'{opt.detection_engine} detection engine not found')
         
@@ -100,26 +105,28 @@ class DetectionAndTracking:
                         exist_ok=self.exist_ok))  # increment run
         (save_dir / 'labels' if self.save_txt else save_dir).mkdir(parents=True,
                                                             exist_ok=True)  # make dir
-        dataset = LoadImages(source, img_size=self.imgsz)
+        dataset = LoadImages(source, img_size=self.imgsz, detection_engine=self.opt.detection_engine)
         self.frame_count = 0
-        img = torch.zeros((1, 3, self.imgsz, self.imgsz), device=self.device)  # init img
+        if self.opt.detection_engine != "yolonas":
+            img = torch.zeros((1, 3, self.imgsz, self.imgsz), device=self.device)  # init img
+        else:
+            img = np.zeros((224,224,3))
 
         if self.opt.detection_engine == "yolov8":
             _ = self.yolov8_engine.infer(img.half() if self.half else img) if self.device.type != 'cpu' else None  # run once
+        
+        if self.opt.detection_engine == "yolonas":
+            _ = self.yolonas_engine.infer(img) if self.device.type != 'cpu' else None  # run once
 
         for path, img, im0s, vid_cap in dataset:
-
-            img = torch.from_numpy(img).to(self.device)
-            img = img.half() if self.half else img.float()  # uint8 to fp16/32
-            img /= 255.0  # 0 - 255 to 0.0 - 1.0
-            if img.ndimension() == 3:
-                img = img.unsqueeze(0)
-
+            
             p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
 
             # choose between prediction engines 
             if self.opt.detection_engine == "yolov8":
-                pred = self.yolov8_engine.infer(img)
+                img, pred = self.yolov8_engine.infer(img)
+            elif self.opt.detection_engine == "yolonas":
+                pred = self.yolonas_engine.infer(img)
             elif self.opt.detection_engine == "clip":
                 pred = self.model.detect(img, patch_size=64)
             else:
@@ -151,7 +158,11 @@ class DetectionAndTracking:
                         confs = det[:, 4]
                         class_nums = det[:, -1].cpu()
                         classes = class_nums
-                                      
+                    elif self.opt.detection_engine == "yolonas":
+                        bboxes = det[0]
+                        confs = det[1]
+                        classes = det[2]
+    
                     elif self.opt.detection_engine == "clip":
                         bboxes = det[:, :4].cpu()
                         confs = det[:, 4]
@@ -182,11 +193,11 @@ class DetectionAndTracking:
                         scores = np.array([d.confidence for d in detections])
                         class_nums = np.array([d.class_num for d in detections])
 
-                    indices = preprocessing.non_max_suppression(
+                    """indices = preprocessing.non_max_suppression(
                         boxs, class_nums, self.nms_max_overlap, scores)
                     
-                    detections = [detections[i] for i in indices]
-
+                    detections = [detections[i] for i in indices]"""
+                    
                     # Call the tracker
                     self.tracker.predict()
                     self.tracker.update(detections)
@@ -243,9 +254,13 @@ class DetectionAndTracking:
         for track in self.tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue
-            xyxy = track.to_tlbr()
+            if self.opt.detection_engine == "yolov8":
+                xyxy = track.to_tlbr()
+            elif self.opt.detection_engine == "yolonas":
+                xyxy = track.to_tlwh()
             class_num = track.class_num
             bbox = xyxy
+            
             if isinstance(class_num,str):
                 class_name = class_num
             else:

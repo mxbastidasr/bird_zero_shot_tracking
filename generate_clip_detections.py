@@ -30,7 +30,8 @@ def extract_image_patch(image, bbox, model_name='yolov8', patch_shape=None):
         boundaries.
 
     """
-    bbox = np.array(bbox.cpu())
+    if not isinstance(bbox, np.ndarray):
+        bbox = np.array(bbox.cpu())
     if model_name=='yolov8':
         if patch_shape is not None:
             # correct aspect ratio to patch shape
@@ -48,6 +49,7 @@ def extract_image_patch(image, bbox, model_name='yolov8', patch_shape=None):
         bbox[2:] = np.minimum(np.asarray(image.shape[:2][::-1]) - 1, bbox[2:])
         if np.any(bbox[:2] >= bbox[2:]):
             return None
+
     sx, sy, ex, ey = bbox
     
     image = image[sy:ey, sx:ex]
@@ -95,15 +97,15 @@ class ImageEncoder(object):
         return max(enumerate(iterable), key=lambda x: x[1])[0]
 
 
-def create_box_encoder(model):
+def create_box_encoder(model, model_name = 'yolov8'):
     
     def encoder(image, boxes):
         clf_dict = []
         img_features = []
         for box in boxes:
             #print("extracting box {} from image {}".format(box, image.shape))
-            patch = extract_image_patch(image, box)
-
+            patch = extract_image_patch(image, box, model_name=model_name)
+            
             if patch is None:
                 print("WARNING: Failed to extract image patch: %s." % str(box))
                 patch = np.random.uniform(
