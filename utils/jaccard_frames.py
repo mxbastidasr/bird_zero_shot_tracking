@@ -59,5 +59,6 @@ def jaccard_consecutive_frames(project_path, file_name, df):
         plt.savefig(os.path.join(project_path,f"iou_{file_name}.png"))
         plt.legend(by_label.values(), by_label.keys())
         plt.title(file_name)
+        return jaccard_df
     except:
         pass
