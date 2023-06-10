@@ -239,7 +239,7 @@ class DetectionAndTracking:
                 os.makedirs(base_path)
             self.frames_detection_df['iou'] = np.nan
             jaccard_df = jaccard_consecutive_frames(save_dir,p.name, self.frames_detection_df)
-            self.frames_detection_df = pd.merge(self.frames_detection_df, jaccard_df, how="outer", on=["STATION", "DATE"])
+            self.frames_detection_df = pd.merge(self.frames_detection_df, jaccard_df, how="outer", on=["frame", "track"])
             self.frames_detection_df.to_csv(os.path.join(base_path, f'full_labels.csv'))
 
             self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
