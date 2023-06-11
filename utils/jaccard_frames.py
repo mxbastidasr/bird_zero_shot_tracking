@@ -92,3 +92,27 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th = 0.01):
         plt.legend(by_label.values(), by_label.keys())
         plt.title(file_name)
     return jaccard_df
+
+def marking_pauses_on_video(video_path, data_frame):
+    p = str(Path(video_path))  # os-agnostic
+    p = os.path.abspath(p)  # absolute path
+    if '*' in p:
+        files = sorted(glob.glob(p, recursive=True))  # glob
+    elif os.path.isdir(p):
+        files = sorted(glob.glob(os.path.join(p, '*.*')))  # dir
+    elif os.path.isfile(p):
+        files = [p]  # files
+    else:
+        raise Exception('ERROR: %s does not exist' % p)
+
+    videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
+    cap = cv2.VideoCapture(videos[0])
+    while (cap.isOpened()):
+        ret, imagen = cap.read()
+        if ret == True:
+            cv2.imshow('video', imagen)
+            if cv2.waitKey(1) & 0xFF == ord('s'):
+                break
+        else: break
+    cap.release()
+cv2.destroyAllWindows()
