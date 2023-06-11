@@ -26,34 +26,13 @@ import generate_clip_detections as gdet
 from utils.yolov8 import Yolov8Engine
 from utils.yolonas import YoloNasEngine
 from clip_zero_shot_classifier import ClipClassifier
-from utils.jaccard_frames import jaccard_consecutive_frames
+from utils.jaccard_frames import get_color_for, jaccard_consecutive_frames
 
 classes = []
 
 names = []
 
 
-
-def get_color_for(class_num):
-    colors = [
-        "#4892EA",
-        "#00EEC3",
-        "#FE4EF0",
-        "#F4004E",
-        "#FA7200",
-        "#EEEE17",
-        "#90FF00",
-        "#78C1D2",
-        "#8C29FF"
-    ]
-
-    num = hash(class_num) # may actually be a number or a string
-    hex = colors[num%len(colors)]
-
-    # adapted from https://stackoverflow.com/questions/29643352/converting-hex-to-rgb-value-in-python
-    rgb = tuple(int(hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-
-    return rgb
 class DetectionAndTracking:
     def __init__(self, opt) -> None:
         self.opt = opt
@@ -242,7 +221,6 @@ class DetectionAndTracking:
           
             self.frames_detection_df = self.frames_detection_df.merge(jaccard_df, how="outer", on=["frame", "track"])
             self.frames_detection_df.to_csv(os.path.join(base_path, f'full_labels.csv'))
-
             self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
 
             if self.opt.info: 
