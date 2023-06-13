@@ -54,7 +54,7 @@ def bb_intersection_over_union(boxA, boxB):
     # return the intersection over union value
     return iou
 
-def jaccard_consecutive_frames(project_path, file_name, df, pause_th = 0.01):
+def jaccard_consecutive_frames(project_path, file_name, df, pause_th = 0.001):
     df = df[df['class'].isin(["hummingbird"])==True]
     df = df.reset_index(drop=True)
     tracks = list(np.unique(df['track'].values))
@@ -127,7 +127,7 @@ def marking_pauses_on_video(video_path, vid_writer, data_frame):
                     frame = plot_one_box(bbox, frame, label=class_label,
                             color=color, line_thickness=3)
                     if class_label=='hummingbird' and pause == 1.0:
-                        org = (50,50 + 5*track)
+                        org = (50,50 + 10*track)
                         frame = cv2.putText(frame, f'Pause hummingbird {track}', org, font, 1, color, 3, cv2.LINE_AA)
                     
             except:
