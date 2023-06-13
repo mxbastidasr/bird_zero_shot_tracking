@@ -28,6 +28,10 @@ from utils.yolonas import YoloNasEngine
 from clip_zero_shot_classifier import ClipClassifier
 from utils.jaccard_frames import get_color_for, jaccard_consecutive_frames, marking_pauses_on_video
 
+import logging
+
+logging.getLogger("super_gradients").setLevel(logging.WARNING)
+
 classes = []
 
 names = []
@@ -308,7 +312,7 @@ if __name__ == '__main__':
     parser.add_argument('--info', action='store_true',
                         help='Print debugging info.')
     parser.add_argument("--detection-engine", default="yolov8", help="Which engine you want to use for object detection (yolov8.")
-    parser.add_argument("--clip-labels", nargs='+', default=["hummingbird", "flower","glass","plastic","vessel with water", "not bird"])
+    parser.add_argument("--clip-labels", nargs='+', default=["hummingbird", "flower","glass","plastic vessel","vessel with water", "not bird"])
     parser.add_argument('--pause_th', type=float,
                         default=0.01, help='pause marking threshold')
     opt = parser.parse_args()
