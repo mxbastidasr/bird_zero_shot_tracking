@@ -5,6 +5,7 @@ import cv2
 import matplotlib.pyplot as plt
 import glob
 from pathlib import Path
+from utils.plots import plot_one_box
 
 vid_formats = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # acceptable video suffixes
 
@@ -93,7 +94,7 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th = 0.01):
         plt.title(file_name)
     return jaccard_df
 
-def marking_pauses_on_video(video_path, data_frame):
+def marking_pauses_on_video(video_path, vid_writer, data_frame):
     p = str(Path(video_path))  # os-agnostic
     p = os.path.abspath(p)  # absolute path
     if '*' in p:
@@ -104,15 +105,39 @@ def marking_pauses_on_video(video_path, data_frame):
         files = [p]  # files
     else:
         raise Exception('ERROR: %s does not exist' % p)
+    data_frame_group = data_frame.groupby(['frame'])
 
     videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
     cap = cv2.VideoCapture(videos[0])
+    frame_count = 0
+    org = (40, 40)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+
     while (cap.isOpened()):
-        ret, imagen = cap.read()
+        ret, frame = cap.read()
         if ret == True:
-            cv2.imshow('video', imagen)
+            
+            try:
+                group_content = data_frame_group.get_group(frame_count)
+                for value in group_content.values.tolist():
+                    _, track, class_label, bbox, _,_, pause = value
+                    label = f'{class_label} #{track}'
+                    color = get_color_for(label)
+                    
+                    frame = plot_one_box(bbox, frame, label=class_label,
+                            color=color, line_thickness=3)
+                    if class_label=='hummingbird' and pause == 1.0:
+                        org = (50,50 + 5*track)
+                        frame = cv2.putText(frame, f'Pause hummingbird {track}', org, font, 1, color, 3, cv2.LINE_AA)
+                    
+            except:
+                pass
+            
+            vid_writer.write(frame)
+            
             if cv2.waitKey(1) & 0xFF == ord('s'):
                 break
+            frame_count += 1
         else: break
     cap.release()
-cv2.destroyAllWindows()
+    vid_writer.release()  # release previous video writer

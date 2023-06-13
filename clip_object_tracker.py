@@ -26,7 +26,7 @@ import generate_clip_detections as gdet
 from utils.yolov8 import Yolov8Engine
 from utils.yolonas import YoloNasEngine
 from clip_zero_shot_classifier import ClipClassifier
-from utils.jaccard_frames import get_color_for, jaccard_consecutive_frames
+from utils.jaccard_frames import get_color_for, jaccard_consecutive_frames, marking_pauses_on_video
 
 classes = []
 
@@ -121,9 +121,7 @@ class DetectionAndTracking:
                
                 p = Path(p)  # to Path
                 save_path = str(save_dir / p.name)  # img.jpg
-                """txt_path = str(save_dir / 'labels' / p.stem) + \
-                    ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt"""
-                txt_path = None
+             
                 # normalization gain whwh
                 gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]
                
@@ -150,9 +148,6 @@ class DetectionAndTracking:
                         bboxes = det[:, :4].cpu()
                         confs = det[:, 4]
                         classes = det[:, -1].cpu()
-                        
-
-                    names_final = [self.names[int(c)] for c in classes]
                     
                     # encode yolo detections and feed to tracker
                     features, clf_dict = self.encoder(im0, bboxes)
@@ -165,15 +160,10 @@ class DetectionAndTracking:
                         confs = [x['score'] for x in clf_dict]
                         detections = [Detection(bbox, conf, class_num, feature) for bbox, conf, class_num, feature in zip(
                             bboxes, confs, classes, features)]
-
-                    # run non-maxima supression
-                    boxs = np.array([d.tlwh for d in detections])
                     
                     if clf_dict is not None:
-                        scores = np.array(confs)
                         class_nums = np.array(classes)
                     else:
-                        scores = np.array([d.confidence for d in detections])
                         class_nums = np.array([d.class_num for d in detections])
                     
                     # Call the tracker
@@ -182,9 +172,6 @@ class DetectionAndTracking:
 
                     # update tracks
                     im0 = self.update_tracks(save_img, im0, gn)
-
-                # Print time (inference + NMS)
-                #print(f'Done. ({t2 - t1:.3f}s)')
 
                 # Stream results
                 if self.view_img:
@@ -208,7 +195,6 @@ class DetectionAndTracking:
                             h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                             self.vid_writer = cv2.VideoWriter(
                                 save_path, cv2.VideoWriter_fourcc(*fourcc), fps, (w, h))
-                        self.vid_writer.write(im0)
 
                 self.frame_count = self.frame_count+1
 
@@ -217,11 +203,16 @@ class DetectionAndTracking:
             if not os.path.isdir(base_path):
                 os.makedirs(base_path)
 
-            jaccard_df = jaccard_consecutive_frames(save_dir,p.name, self.frames_detection_df)
+            jaccard_df = jaccard_consecutive_frames(save_dir,p.name, self.frames_detection_df, opt.pause_th)
           
             self.frames_detection_df = self.frames_detection_df.merge(jaccard_df, how="outer", on=["frame", "track"])
+            
             self.frames_detection_df.to_csv(os.path.join(base_path, f'full_labels.csv'))
+            marking_pauses_on_video(source,self.vid_writer,self.frames_detection_df)
+
             self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
+
+           
 
             if self.opt.info: 
                 print(f"Results saved to {save_dir}{s}")
@@ -318,6 +309,8 @@ if __name__ == '__main__':
                         help='Print debugging info.')
     parser.add_argument("--detection-engine", default="yolov8", help="Which engine you want to use for object detection (yolov8.")
     parser.add_argument("--clip-labels", nargs='+', default=["hummingbird", "flower","glass","plastic", "not a bird"])
+    parser.add_argument('--pause_th', type=float,
+                        default=0.01, help='pause marking threshold')
     opt = parser.parse_args()
     print(opt)
     video_detection = DetectionAndTracking(opt)
