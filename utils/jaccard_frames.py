@@ -56,7 +56,7 @@ def bb_intersection_over_union(boxA, boxB):
     # return the intersection over union value
     return iou
 
-def jaccard_consecutive_frames(project_path, file_name, df, pause_th = 0.001):
+def jaccard_consecutive_frames(project_path, file_name, df, pause_th=0.01):
     df = df[df['class'].isin(["hummingbird"])==True]
     df = df.reset_index(drop=True)
     tracks = list(np.unique(df['track'].values))
@@ -66,19 +66,22 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th = 0.001):
         df_track = df[df['track']==track]
         df_track = df_track.reset_index(drop=True)
         iou_anterior = 0
+
         for idx in range(len(df_track)):
             frame = int(df_track['frame'][idx]) 
             bbox_A=df_track['bbox'][idx]
             bbox_B=df_track['bbox'][idx+1]
             iou_actual = bb_intersection_over_union(bbox_A, bbox_B)
-            variance = abs(iou_actual - iou_anterior)
+            #variance = abs(iou_actual - iou_anterior)
             iou_anterior = iou_actual
-            pause = 1 if variance <= pause_th else np.nan
-            jaccard_distance.append((track, frame, iou_actual, variance, pause))
+            #pause = 1 if variance <= pause_th else np.nan
+            jaccard_distance.append((track, frame, iou_actual))
             if idx>=len(df_track)-2:
                 break
-    jaccard_df = pd.DataFrame(jaccard_distance, columns=["track", "frame", "iou", "variance", "pause"])
-
+    jaccard_df = pd.DataFrame(jaccard_distance, columns=["track", "frame", "iou"])
+    jaccard_df["dy/dx"] = list(np.absolute(np.diff(jaccard_df["iou"])/np.diff(range(len(jaccard_df["iou"]))))) + [0]
+    jaccard_df["pause"] = [1 if 0<=value<=pause_th else np.nan for value in jaccard_df["dy/dx"]]
+    
     for key, grp in jaccard_df.groupby(['track']):
         fig, ax = plt.subplots()
         color_label = f'hummingbird #{key}'
@@ -163,6 +166,7 @@ def reformating_path(str_path):
     return videos[0]
 
 def jaccard_animation(video_path, df_path):
+
     df = pd.read_csv(df_path)
     df = df[df['class'].isin(["hummingbird"])==True]
     df = df.reset_index(drop=True)
@@ -177,18 +181,22 @@ def jaccard_animation(video_path, df_path):
     fps = cap.get(cv2.CAP_PROP_FPS)
     frame_time = 1.0/fps
     
-    track_df_list, iou_list = [], []
+    track_df_list, iou_list, dydx = [], [], []
     x_data = [ [] for _ in range(len(tracks)) ]
     y_data = [ [] for _ in range(len(tracks)) ]
+    dy_data = [ [] for _ in range(len(tracks)) ]
     for track_idx, track in enumerate(tracks):
     
         color_label = f'hummingbird #{track}'
         ax[track_idx+1].set(xlim=[0, num_frames], ylim=[0, 1.1], xlabel='Frames', ylabel=color_label)
-
-        track_df_list.append(df[df['track']==track][['frame','iou']])
+        #ax[track_idx+1].legend(loc='upper left', frameon=False)
+        
+        track_df_list.append(df[df['track']==track][['frame','iou', 'dy/dx']])
         iou_temp = [[idx, 0] for idx in range(num_frames-1)  if idx not in track_df_list[track_idx]['frame'].values]  +  track_df_list[track_idx].values.tolist()
-        iou_list.append([iou_data[1] for iou_data in iou_temp])
-    
+        iou_temp = [iou_data[1] for iou_data in iou_temp]
+        iou_list.append(iou_temp)
+        dydx.append([value for value in track_df_list[track_idx]['dy/dx']] +[0,0])
+
     ret,frame = cap.read()
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     im = ax[0].imshow(frame)
@@ -201,12 +209,14 @@ def jaccard_animation(video_path, df_path):
             color_track_bgr = np.array(list((color_bgr[2],color_bgr[1],color_bgr[0])))/(255,255,255)
             x_data[track_idx].append(i)
             y_data[track_idx].append((iou_list[track_idx][i]))
+            dy_data[track_idx].append((dydx[track_idx][i]))
             ret, frame = cap.read()
             if ret:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 im.set_array(frame)
             ax[track_idx+1].plot(x_data[track_idx], y_data[track_idx], color=color_track_bgr)
-
+            ax[track_idx+1].plot(x_data[track_idx], dy_data[track_idx], color='red')
+            
         time.sleep(frame_time)
         return ax, im,
 
