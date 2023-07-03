@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation, writers
+import time
 import glob
 from pathlib import Path
 from utils.plots import plot_one_box
@@ -80,7 +82,8 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th = 0.001):
     for key, grp in jaccard_df.groupby(['track']):
         fig, ax = plt.subplots()
         color_label = f'hummingbird #{key}'
-        color_track_bgr = np.array(list(get_color_for(color_label)))/255
+        color_bgr = get_color_for(color_label)
+        color_track_bgr = np.array(list((color_bgr[2],color_bgr[1],color_bgr[0])))/(255,255,255)
 
         ax = grp.plot(ax=ax, kind='line', x='frame', y='iou', c=color_track_bgr, label=key)
 
@@ -94,7 +97,7 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th = 0.001):
         plt.title(file_name)
     return jaccard_df
 
-def marking_pauses_on_video(video_path, vid_writer, data_frame):
+def marking_pauses_on_video(video_path, vid_writer, data_frame, show_img=False):
     p = str(Path(video_path))  # os-agnostic
     p = os.path.abspath(p)  # absolute path
     if '*' in p:
@@ -122,15 +125,15 @@ def marking_pauses_on_video(video_path, vid_writer, data_frame):
                 for value in group_content.values.tolist():
                     _, track, class_label, bbox, _,_, pause = value
                     label = f'{class_label} #{track}'
+                    
                     color = get_color_for(label)
                     
-                    frame = plot_one_box(bbox, frame, label=class_label,
+                    frame = plot_one_box(bbox, frame, label=label,
                             color=color, line_thickness=3)
                     if class_label=='hummingbird' and pause == 1.0:
                         org = (50,50 + 10*track)
                         frame = cv2.putText(frame, f'Pause hummingbird {track}', org, font, 1, color, 3, cv2.LINE_AA)
-                    
-            except:
+            except Exception as e:
                 pass
             
             vid_writer.write(frame)
@@ -141,3 +144,74 @@ def marking_pauses_on_video(video_path, vid_writer, data_frame):
         else: break
     cap.release()
     vid_writer.release()  # release previous video writer
+
+
+
+def reformating_path(str_path):
+    p = str(Path(str_path))  # os-agnostic
+    p = os.path.abspath(p)  # absolute path
+    if '*' in p:
+        files = sorted(glob.glob(p, recursive=True))  # glob
+    elif os.path.isdir(p):
+        files = sorted(glob.glob(os.path.join(p, '*.*')))  # dir
+    elif os.path.isfile(p):
+        files = [p]  # files
+    else:
+        raise Exception('ERROR: %s does not exist' % p)
+
+    videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
+    return videos[0]
+
+def jaccard_animation(video_path, df_path):
+    df = pd.read_csv(df_path)
+    df = df[df['class'].isin(["hummingbird"])==True]
+    df = df.reset_index(drop=True)
+    video_path = reformating_path(video_path)
+    
+    tracks = np.unique(df["track"].values)
+
+    cap = cv2.VideoCapture(video_path)
+    num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fig, ax = plt.subplots(nrows=len(tracks)+1,ncols=1, figsize=(10,10))
+    
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_time = 1.0/fps
+    
+    track_df_list, iou_list = [], []
+    x_data = [ [] for _ in range(len(tracks)) ]
+    y_data = [ [] for _ in range(len(tracks)) ]
+    for track_idx, track in enumerate(tracks):
+    
+        color_label = f'hummingbird #{track}'
+        ax[track_idx+1].set(xlim=[0, num_frames], ylim=[0, 1.1], xlabel='Frames', ylabel=color_label)
+
+        track_df_list.append(df[df['track']==track][['frame','iou']])
+        iou_temp = [[idx, 0] for idx in range(num_frames-1)  if idx not in track_df_list[track_idx]['frame'].values]  +  track_df_list[track_idx].values.tolist()
+        iou_list.append([iou_data[1] for iou_data in iou_temp])
+    
+    ret,frame = cap.read()
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    im = ax[0].imshow(frame)
+  
+    def animate(i):
+        for track_idx, track in enumerate(tracks):
+            
+            color_label = f'hummingbird #{track}'
+            color_bgr = get_color_for(color_label)
+            color_track_bgr = np.array(list((color_bgr[2],color_bgr[1],color_bgr[0])))/(255,255,255)
+            x_data[track_idx].append(i)
+            y_data[track_idx].append((iou_list[track_idx][i]))
+            ret, frame = cap.read()
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                im.set_array(frame)
+            ax[track_idx+1].plot(x_data[track_idx], y_data[track_idx], color=color_track_bgr)
+
+        time.sleep(frame_time)
+        return ax, im,
+
+    ani = FuncAnimation(fig, func=animate, frames=num_frames, interval=frame_time)
+    Writer = writers['ffmpeg']
+    writer = Writer(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
+    ani.save('out.mp4',writer=writer)
+    cap.release()

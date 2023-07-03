@@ -26,7 +26,7 @@ import generate_clip_detections as gdet
 from utils.yolov8 import Yolov8Engine
 from utils.yolonas import YoloNasEngine
 from clip_zero_shot_classifier import ClipClassifier
-from utils.jaccard_frames import get_color_for, jaccard_consecutive_frames, marking_pauses_on_video
+from utils.jaccard_frames import get_color_for, jaccard_consecutive_frames, marking_pauses_on_video, jaccard_animation
 
 import logging
 
@@ -207,7 +207,7 @@ class DetectionAndTracking:
             if not os.path.isdir(base_path):
                 os.makedirs(base_path)
 
-            jaccard_df = jaccard_consecutive_frames(save_dir,p.name, self.frames_detection_df, opt.pause_th)
+            jaccard_df = jaccard_consecutive_frames(save_dir,p.name, self.frames_detection_df, pause_th = self.opt.pause_th)
           
             self.frames_detection_df = self.frames_detection_df.merge(jaccard_df, how="outer", on=["frame", "track"])
             
@@ -315,8 +315,16 @@ if __name__ == '__main__':
     parser.add_argument("--clip-labels", nargs='+', default=["hummingbird", "flower","glass","plastic vessel","vessel with water", "not bird"])
     parser.add_argument('--pause_th', type=float,
                         default=0.01, help='pause marking threshold')
+    parser.add_argument('--animate', action='store_true',
+                        help='animate results')
     opt = parser.parse_args()
     print(opt)
-    video_detection = DetectionAndTracking(opt)
-    with torch.no_grad():  
-        video_detection(opt.source, opt.project, opt.name, save_img=True)
+    if not opt.animate:
+        video_detection = DetectionAndTracking(opt)
+        with torch.no_grad():  
+            video_detection(opt.source, opt.project, opt.name, save_img=True)
+    elif opt.animate:
+        path_src = Path(opt.project) / opt.name 
+        data_frame =  Path(opt.project) / "labels/full_labels.csv"
+        jaccard_animation(path_src, data_frame)
+
