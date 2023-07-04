@@ -125,7 +125,7 @@ class DetectionAndTracking:
                
                 p = Path(p)  # to Path
                 save_path = str(save_dir / p.name)  # img.jpg
-             
+
                 # normalization gain whwh
                 gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]
                
@@ -210,10 +210,12 @@ class DetectionAndTracking:
             jaccard_df = jaccard_consecutive_frames(save_dir,p.name, self.frames_detection_df, pause_th = self.opt.pause_th)
           
             self.frames_detection_df = self.frames_detection_df.merge(jaccard_df, how="outer", on=["frame", "track"])
-            
-            self.frames_detection_df.to_csv(os.path.join(base_path, f'full_labels.csv'))
+            df_path = os.path.join(base_path, f'full_labels.csv')
+            self.frames_detection_df.to_csv(df_path)
             marking_pauses_on_video(source,self.vid_writer,self.frames_detection_df)
-
+            if self.opt.animate:
+                save_animation = save_path.split('.')[0] + "_animation.mp4"
+                jaccard_animation(save_path, df_path,save_animation)
             self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
 
            
@@ -319,12 +321,9 @@ if __name__ == '__main__':
                         help='animate results')
     opt = parser.parse_args()
     print(opt)
-    if not opt.animate:
-        video_detection = DetectionAndTracking(opt)
-        with torch.no_grad():  
-            video_detection(opt.source, opt.project, opt.name, save_img=True)
-    elif opt.animate:
-        path_src = Path(opt.project) / opt.name 
-        data_frame =  Path(opt.project) / "labels/full_labels.csv"
-        jaccard_animation(path_src, data_frame)
+   
+    video_detection = DetectionAndTracking(opt)
+    with torch.no_grad():  
+        video_detection(opt.source, opt.project, opt.name, save_img=True)
+        
 

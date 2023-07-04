@@ -165,7 +165,7 @@ def reformating_path(str_path):
     videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
     return videos[0]
 
-def jaccard_animation(video_path, df_path):
+def jaccard_animation(video_path, df_path, save_animation):
 
     df = pd.read_csv(df_path)
     df = df[df['class'].isin(["hummingbird"])==True]
@@ -189,8 +189,7 @@ def jaccard_animation(video_path, df_path):
     
         color_label = f'hummingbird #{track}'
         ax[track_idx+1].set(xlim=[0, num_frames], ylim=[0, 1.1], xlabel='Frames', ylabel=color_label)
-        #ax[track_idx+1].legend(loc='upper left', frameon=False)
-        
+
         track_df_list.append(df[df['track']==track][['frame','iou', 'dy/dx']])
         iou_temp = [[idx, 0] for idx in range(num_frames-1)  if idx not in track_df_list[track_idx]['frame'].values]  +  track_df_list[track_idx].values.tolist()
         iou_temp = [iou_data[1] for iou_data in iou_temp]
@@ -216,12 +215,12 @@ def jaccard_animation(video_path, df_path):
                 im.set_array(frame)
             ax[track_idx+1].plot(x_data[track_idx], y_data[track_idx], color=color_track_bgr)
             ax[track_idx+1].plot(x_data[track_idx], dy_data[track_idx], color='red')
-            
+            ax[track_idx+1].legend(['iou','d(iou)/d(frame)'])
         time.sleep(frame_time)
         return ax, im,
 
     ani = FuncAnimation(fig, func=animate, frames=num_frames, interval=frame_time)
     Writer = writers['ffmpeg']
     writer = Writer(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
-    ani.save('out.mp4',writer=writer)
+    ani.save(save_animation,writer=writer)
     cap.release()
