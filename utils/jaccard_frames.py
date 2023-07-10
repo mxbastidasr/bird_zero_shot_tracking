@@ -202,20 +202,22 @@ def jaccard_animation(video_path, df_path, save_animation):
   
     def animate(i):
         for track_idx, track in enumerate(tracks):
-            
-            color_label = f'hummingbird #{track}'
-            color_bgr = get_color_for(color_label)
-            color_track_bgr = np.array(list((color_bgr[2],color_bgr[1],color_bgr[0])))/(255,255,255)
-            x_data[track_idx].append(i)
-            y_data[track_idx].append((iou_list[track_idx][i]))
-            dy_data[track_idx].append((dydx[track_idx][i]))
-            ret, frame = cap.read()
-            if ret:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                im.set_array(frame)
-            ax[track_idx+1].plot(x_data[track_idx], y_data[track_idx], color=color_track_bgr)
-            ax[track_idx+1].plot(x_data[track_idx], dy_data[track_idx], color='red')
-            ax[track_idx+1].legend(['iou','d(iou)/d(frame)'])
+            try:
+                color_label = f'hummingbird #{track}'
+                color_bgr = get_color_for(color_label)
+                color_track_bgr = np.array(list((color_bgr[2],color_bgr[1],color_bgr[0])))/(255,255,255)
+                x_data[track_idx].append(i)
+                y_data[track_idx].append((iou_list[track_idx][i]))
+                dy_data[track_idx].append((dydx[track_idx][i]))
+                ret, frame = cap.read()
+                if ret:
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    im.set_array(frame)
+                ax[track_idx+1].plot(x_data[track_idx], y_data[track_idx], color=color_track_bgr)
+                ax[track_idx+1].plot(x_data[track_idx], dy_data[track_idx], color='red')
+                ax[track_idx+1].legend(['iou','d(iou)/d(frame)'])
+            except:
+                pass
         time.sleep(frame_time)
         return ax, im,
 
@@ -223,4 +225,5 @@ def jaccard_animation(video_path, df_path, save_animation):
     Writer = writers['ffmpeg']
     writer = Writer(fps=fps, metadata=dict(artist='Me'), bitrate=1800)
     ani.save(save_animation,writer=writer)
+    plt.close()
     cap.release()

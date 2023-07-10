@@ -314,7 +314,7 @@ if __name__ == '__main__':
     parser.add_argument('--info', action='store_true',
                         help='Print debugging info.')
     parser.add_argument("--detection-engine", default="yolov8", help="Which engine you want to use for object detection (yolov8.")
-    parser.add_argument("--clip-labels", nargs='+', default=["hummingbird", "flower","glass","plastic vessel","vessel with water", "not bird"])
+    parser.add_argument("--clip-labels", nargs='+', default=["hummingbird", "flower", "leaves", "feeder"])
     parser.add_argument('--pause_th', type=float,
                         default=0.01, help='pause marking threshold')
     parser.add_argument('--animate', action='store_true',

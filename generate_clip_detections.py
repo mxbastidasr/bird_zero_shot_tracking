@@ -112,12 +112,19 @@ def create_box_encoder(model, model_name = 'yolov8'):
                     0., 255., image.shape).astype(np.uint8)
                 
             clip_patch = model.img_preporcess_clip(patch)
+
             img_emb = model.model.get_image_features(clip_patch).detach().cpu().numpy()
-            clas_scores = np.dot(img_emb, model.label_emb.T)
-            clas_pred = np.argmax(clas_scores)
+            clas_scores = np.dot(img_emb, model.label_emb.T)/(np.linalg.norm(img_emb)*np.linalg.norm(model.label_emb.T))
             
+            clas_pred = np.argmax(clas_scores)
+           
             img_emb = img_emb.squeeze()
-            clf_dict.append({'label': model.labels[clas_pred],'score':clas_pred, 'img_features': img_emb })
+            if clas_pred ==0 and clas_scores[0][clas_pred] >= 0.1:
+                clf_dict.append({'label': model.labels[clas_pred],'score':clas_scores[0][clas_pred], 'img_features': img_emb })
+            elif clas_pred ==0 and clas_scores[0][clas_pred] < 0.1:
+                clf_dict.append({'label': model.labels[-1],'score':clas_scores[0][clas_pred], 'img_features': img_emb })
+            else:
+                clf_dict.append({'label': model.labels[clas_pred],'score':clas_scores[0][clas_pred], 'img_features': img_emb })
 
         img_features = np.array([x['img_features'] for x in clf_dict])
            
