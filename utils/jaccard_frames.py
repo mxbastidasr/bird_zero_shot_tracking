@@ -60,27 +60,70 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th=0.01):
     df = df[df['class'].isin(["hummingbird"])==True]
     df = df.reset_index(drop=True)
     tracks = list(np.unique(df['track'].values))
+    bbox = df['bbox'].values
+    w = [(value[2]-value[0]) for value in bbox]
+    h =  [(value[3]-value[1]) for value in bbox]
+
+    cx = [(value[0] + w[idx]/2)/200 for idx, value in enumerate(bbox)]
+    cy = [(value[1] + h[idx]/2)/200 for idx, value in enumerate(bbox)]
+
+    magnitud_orig = [(cx[idx]**2 + cy[idx]**2)**(1/2) for idx in range (len(cx))]
+    diff = list(np.diff(np.array(magnitud_orig))) + [0]
     
     jaccard_distance = []
     for track in tracks:
         df_track = df[df['track']==track]
         df_track = df_track.reset_index(drop=True)
-        iou_anterior = 0
-
+        jaccard_distance.append(0)
         for idx in range(len(df_track)):
-            frame = int(df_track['frame'][idx]) 
+
             bbox_A=df_track['bbox'][idx]
             bbox_B=df_track['bbox'][idx+1]
             iou_actual = bb_intersection_over_union(bbox_A, bbox_B)
-            #variance = abs(iou_actual - iou_anterior)
-            iou_anterior = iou_actual
-            #pause = 1 if variance <= pause_th else np.nan
-            jaccard_distance.append((track, frame, iou_actual))
+           
+            jaccard_distance.append(iou_actual)
             if idx>=len(df_track)-2:
                 break
-    jaccard_df = pd.DataFrame(jaccard_distance, columns=["track", "frame", "iou"])
-    jaccard_df["dy/dx"] = list(np.absolute(np.diff(jaccard_df["iou"])/np.diff(range(len(jaccard_df["iou"]))))) + [0]
-    jaccard_df["pause"] = [1 if 0<=value<=pause_th else np.nan for value in jaccard_df["dy/dx"]]
+    diff_iou = np.array(list(np.diff(np.array(jaccard_distance))) + [0])
+    mean = np.array(abs(np.array(diff_iou))).mean()
+    plat = [mean+0.005 if 0 <= abs(value) <= mean else mean-0.005 for value in diff_iou]
+    res = []
+    idx = 0
+
+    while idx < (len(plat)):
+        strt_pos = idx
+        val = plat[idx]
+
+        # Getting last position
+        while (idx < len(plat) and plat[idx] == val):
+            idx += 1
+        end_pos = idx - 1
+
+        # Appending in format [element, start, end position]
+        res.append((val, strt_pos, end_pos))
+    pause_range = [(init, fin) for (value, init, fin) in res if (fin-init>=10) and (value==mean+0.005)]
+    pause = np.array([None for _ in range(len(plat))])
+    for (init, fin) in pause_range:
+        pause[init : fin] = 1
+ 
+    jaccard_df=pd.DataFrame()
+
+    jaccard_df['track'] = df['track']
+    jaccard_df['frame'] = df['frame']
+    jaccard_df['iou'] = jaccard_distance
+    jaccard_df['diff_iou'] = diff_iou
+    jaccard_df['cx'] = cx
+    jaccard_df['cy'] = cy
+    jaccard_df['magnitude_centroid'] = magnitud_orig
+    jaccard_df['dy_magnitud'] = diff
+    jaccard_df['dy_platteau'] = plat
+    jaccard_df['pause'] = pause
+
+    #jaccard_df = pd.DataFrame(jaccard_distance, columns=["track", "frame", "iou"])
+    
+    #jaccard_df["dy/dx"] = list(np.diff(jaccard_df["iou"])/np.diff(range(len(jaccard_df["iou"])))) + [0]
+    
+    #jaccard_df["pause"] = [1 if 0<=np.abs(value)<=pause_th else np.nan for value in jaccard_df["dy/dx"]]
     
     for key, grp in jaccard_df.groupby(['track']):
         fig, ax = plt.subplots()
@@ -94,11 +137,12 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th=0.01):
         by_label = dict(zip(labels, handles))
         if not os.path.isdir(os.path.join(project_path,"figures")):
             os.makedirs(os.path.join(project_path,"figures"))
-
+        for (init, fin) in pause_range:
+            plt.axvspan(init,fin, color='yellow', alpha=0.3)
         plt.savefig(os.path.join(project_path,f"figures/iou_{file_name}_{color_label}.png"))
         plt.legend(by_label.values(), by_label.keys())
         plt.title(file_name)
-    return jaccard_df
+    return jaccard_df, pause_range
 
 def marking_pauses_on_video(video_path, vid_writer, data_frame, show_img=False):
     p = str(Path(video_path))  # os-agnostic
@@ -111,6 +155,7 @@ def marking_pauses_on_video(video_path, vid_writer, data_frame, show_img=False):
         files = [p]  # files
     else:
         raise Exception('ERROR: %s does not exist' % p)
+    data_frame = data_frame[['frame','track','class','bbox','pause']]
     data_frame_group = data_frame.groupby(['frame'])
 
     videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
@@ -126,14 +171,15 @@ def marking_pauses_on_video(video_path, vid_writer, data_frame, show_img=False):
             try:
                 group_content = data_frame_group.get_group(frame_count)
                 for value in group_content.values.tolist():
-                    _, track, class_label, bbox, _,_, pause = value
+                    _,track, class_label, bbox, pause = value
                     label = f'{class_label} #{track}'
                     
                     color = get_color_for(label)
                     
                     frame = plot_one_box(bbox, frame, label=label,
                             color=color, line_thickness=3)
-                    if class_label=='hummingbird' and pause == 1.0:
+                    
+                    if class_label=='hummingbird' and pause == 1:
                         org = (50,50 + 10*track)
                         frame = cv2.putText(frame, f'Pause hummingbird {track}', org, font, 1, color, 3, cv2.LINE_AA)
             except Exception as e:
@@ -165,7 +211,7 @@ def reformating_path(str_path):
     videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
     return videos[0]
 
-def jaccard_animation(video_path, df_path, save_animation):
+def jaccard_animation(video_path, df_path, save_animation, pause_range):
 
     df = pd.read_csv(df_path)
     df = df[df['class'].isin(["hummingbird"])==True]
@@ -188,14 +234,14 @@ def jaccard_animation(video_path, df_path, save_animation):
     for track_idx, track in enumerate(tracks):
     
         color_label = f'hummingbird #{track}'
-        ax[track_idx+1].set(xlim=[0, num_frames], ylim=[0, 1.1], xlabel='Frames', ylabel=color_label)
+        ax[track_idx+1].set(xlim=[0, num_frames], ylim=[0, 5], xlabel='Frames', ylabel=color_label)
 
-        track_df_list.append(df[df['track']==track][['frame','iou', 'dy/dx']])
-        iou_temp = [[idx, 0] for idx in range(num_frames-1)  if idx not in track_df_list[track_idx]['frame'].values]  +  track_df_list[track_idx].values.tolist()
-        iou_temp = [iou_data[1] for iou_data in iou_temp]
-        iou_list.append(iou_temp)
-        dydx.append([value for value in track_df_list[track_idx]['dy/dx']] +[0,0])
-
+        track_df_list.append(df[df['track']==track][['frame','iou', 'dy_platteau']])#'iou', 'dy/dx']])
+        #iou_temp = [[idx, 0] for idx in range(num_frames-1)  if idx not in track_df_list[track_idx]['frame'].values]  +  track_df_list[track_idx].values.tolist()
+        #iou_temp = [iou_data[1] for iou_data in iou_temp]
+        #iou_list.append(track_df_list[track_idx]['dy_platteau'])#(iou_temp)
+        dydx.append([value for value in track_df_list[track_idx] ['iou']]) #['dy/dx']] +[0,0])
+        
     ret,frame = cap.read()
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     im = ax[0].imshow(frame)
@@ -207,14 +253,19 @@ def jaccard_animation(video_path, df_path, save_animation):
                 color_bgr = get_color_for(color_label)
                 color_track_bgr = np.array(list((color_bgr[2],color_bgr[1],color_bgr[0])))/(255,255,255)
                 x_data[track_idx].append(i)
-                y_data[track_idx].append((iou_list[track_idx][i]))
-                dy_data[track_idx].append((dydx[track_idx][i]))
+                #y_data[track_idx].append((iou_list[track_idx][i]))
+
+                y_data[track_idx].append((dydx[track_idx][i]))
+                
+                for (init, fin) in pause_range:
+                    plt.axvspan(init,fin, color='yellow', alpha=0.3)
+                #dy_data[track_idx].append((dydx[track_idx][i]))
                 ret, frame = cap.read()
                 if ret:
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     im.set_array(frame)
                 ax[track_idx+1].plot(x_data[track_idx], y_data[track_idx], color=color_track_bgr)
-                ax[track_idx+1].plot(x_data[track_idx], dy_data[track_idx], color='red')
+                #ax[track_idx+1].plot(x_data[track_idx], dy_data[track_idx], color='red')
                 ax[track_idx+1].legend(['iou','d(iou)/d(frame)'])
             except:
                 pass

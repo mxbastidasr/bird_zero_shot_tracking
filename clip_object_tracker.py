@@ -46,6 +46,7 @@ class DetectionAndTracking:
         self.exist_ok = opt.exist_ok
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print('choosen dedvice: ',self.device)
         self.half = self.device != "cpu"
 
         
@@ -84,7 +85,7 @@ class DetectionAndTracking:
         self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
         
 
-    def detect(self, source, project, name, save_img=False):
+    def detect(self, source, project, name, save_img=True):
 
         t0 = time_synchronized()
          # Directories
@@ -207,7 +208,7 @@ class DetectionAndTracking:
             if not os.path.isdir(base_path):
                 os.makedirs(base_path)
 
-            jaccard_df = jaccard_consecutive_frames(save_dir,p.name, self.frames_detection_df, pause_th = self.opt.pause_th)
+            jaccard_df, pause_range = jaccard_consecutive_frames(save_dir,p.name, self.frames_detection_df, pause_th = self.opt.pause_th)
           
             self.frames_detection_df = self.frames_detection_df.merge(jaccard_df, how="outer", on=["frame", "track"])
             df_path = os.path.join(base_path, f'full_labels.csv')
@@ -215,7 +216,7 @@ class DetectionAndTracking:
             marking_pauses_on_video(source,self.vid_writer,self.frames_detection_df)
             if self.opt.animate:
                 save_animation = save_path.split('.')[0] + "_animation.mp4"
-                jaccard_animation(save_path, df_path,save_animation)
+                jaccard_animation(save_path, df_path,save_animation, pause_range)
             self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
 
            
@@ -262,7 +263,7 @@ class DetectionAndTracking:
                             color=get_color_for(label), line_thickness=self.opt.thickness)
         return im0
 
-    def __call__(self, source, project, name, save_img=False) -> None:
+    def __call__(self, source, project, name, save_img=True) -> None:
         self.tracker = Tracker(self.metric)
         self.detect(source, project, name, save_img=save_img)
 

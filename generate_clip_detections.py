@@ -1,6 +1,4 @@
 # vim: expandtab:ts=4:sw=4
-import os
-import errno
 import numpy as np
 import cv2
 import torch
