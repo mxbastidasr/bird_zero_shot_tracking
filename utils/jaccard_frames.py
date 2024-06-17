@@ -8,6 +8,7 @@ import time
 import glob
 from pathlib import Path
 from utils.plots import plot_one_box
+from tqdm import tqdm
 
 vid_formats = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # acceptable video suffixes
 
@@ -56,7 +57,7 @@ def bb_intersection_over_union(boxA, boxB):
     # return the intersection over union value
     return iou
 
-def jaccard_consecutive_frames(project_path, file_name, df, pause_th=0.01):
+def jaccard_consecutive_frames(project_path, file_name, df, pause_th= 0.2):
     df = df[df['class'].isin(["hummingbird"])==True]
     df = df.reset_index(drop=True)
     tracks = list(np.unique(df['track'].values))
@@ -86,7 +87,7 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th=0.01):
                 break
     diff_iou = np.array(list(np.diff(np.array(jaccard_distance))) + [0])
     mean = np.array(abs(np.array(diff_iou))).mean()
-    plat = [mean+0.005 if 0 <= abs(value) <= mean else mean-0.005 for value in diff_iou]
+    plat = [mean + 0.005 if 0 <= abs(value) <= mean - mean*pause_th else mean - 0.005 for value in diff_iou]
     res = []
     idx = 0
 
@@ -112,18 +113,12 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th=0.01):
     jaccard_df['frame'] = df['frame']
     jaccard_df['iou'] = jaccard_distance
     jaccard_df['diff_iou'] = diff_iou
-    jaccard_df['cx'] = cx
-    jaccard_df['cy'] = cy
-    jaccard_df['magnitude_centroid'] = magnitud_orig
+    jaccard_df['cx'] = pd.Series(cx)
+    jaccard_df['cy'] = pd.Series(cy)
+    jaccard_df['magnitude_centroid'] = pd.Series(magnitud_orig)
     jaccard_df['dy_magnitud'] = diff
     jaccard_df['dy_platteau'] = plat
     jaccard_df['pause'] = pause
-
-    #jaccard_df = pd.DataFrame(jaccard_distance, columns=["track", "frame", "iou"])
-    
-    #jaccard_df["dy/dx"] = list(np.diff(jaccard_df["iou"])/np.diff(range(len(jaccard_df["iou"])))) + [0]
-    
-    #jaccard_df["pause"] = [1 if 0<=np.abs(value)<=pause_th else np.nan for value in jaccard_df["dy/dx"]]
     
     for key, grp in jaccard_df.groupby(['track']):
         fig, ax = plt.subplots()
@@ -137,11 +132,20 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th=0.01):
         by_label = dict(zip(labels, handles))
         if not os.path.isdir(os.path.join(project_path,"figures")):
             os.makedirs(os.path.join(project_path,"figures"))
-        for (init, fin) in pause_range:
-            plt.axvspan(init,fin, color='yellow', alpha=0.3)
+        pauses_frames = grp[grp['pause'].notna()]['frame'].values
+        pauses_consec  = np.split(pauses_frames, np.where(np.diff(pauses_frames) != 1)[0]+1)
+        pauses_range = []
+        for consec_group in pauses_consec:
+            try:
+                pauses_range.append((consec_group[0],consec_group[-1]))
+            except:
+                pass
+        for (init, fin) in pauses_range:
+            plt.axvspan(init,fin, color='yellow', alpha=0.3, label ="pause detection")
         plt.savefig(os.path.join(project_path,f"figures/iou_{file_name}_{color_label}.png"))
         plt.legend(by_label.values(), by_label.keys())
         plt.title(file_name)
+        plt.close()
     return jaccard_df, pause_range
 
 def marking_pauses_on_video(video_path, vid_writer, data_frame, show_img=False):
@@ -211,7 +215,7 @@ def reformating_path(str_path):
     videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
     return videos[0]
 
-def jaccard_animation(video_path, df_path, save_animation, pause_range):
+def jaccard_animation(video_path, df_path, save_animation, pause_range, animate_over='centroide'):
 
     df = pd.read_csv(df_path)
     df = df[df['class'].isin(["hummingbird"])==True]
@@ -230,7 +234,7 @@ def jaccard_animation(video_path, df_path, save_animation, pause_range):
     track_df_list, iou_list, dydx = [], [], []
     x_data = [ [] for _ in range(len(tracks)) ]
     y_data = [ [] for _ in range(len(tracks)) ]
-    dy_data = [ [] for _ in range(len(tracks)) ]
+   
     for track_idx, track in enumerate(tracks):
     
         color_label = f'hummingbird #{track}'
@@ -240,7 +244,10 @@ def jaccard_animation(video_path, df_path, save_animation, pause_range):
         #iou_temp = [[idx, 0] for idx in range(num_frames-1)  if idx not in track_df_list[track_idx]['frame'].values]  +  track_df_list[track_idx].values.tolist()
         #iou_temp = [iou_data[1] for iou_data in iou_temp]
         #iou_list.append(track_df_list[track_idx]['dy_platteau'])#(iou_temp)
-        dydx.append([value for value in track_df_list[track_idx] ['iou']]) #['dy/dx']] +[0,0])
+        if animate_over=='iou':
+            dydx.append([value for value in track_df_list[track_idx] ['iou']]) 
+        elif animate_over=='centroide':
+            dydx.append([value for value in track_df_list[track_idx] ['dy_platteau']])
         
     ret,frame = cap.read()
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -266,7 +273,10 @@ def jaccard_animation(video_path, df_path, save_animation, pause_range):
                     im.set_array(frame)
                 ax[track_idx+1].plot(x_data[track_idx], y_data[track_idx], color=color_track_bgr)
                 #ax[track_idx+1].plot(x_data[track_idx], dy_data[track_idx], color='red')
-                ax[track_idx+1].legend(['iou','d(iou)/d(frame)'])
+                if animate_over=='iou':
+                    ax[track_idx+1].legend(['iou'])
+                elif animate_over=='centroide':
+                    ax[track_idx+1].legend(['centroide'])
             except:
                 pass
         time.sleep(frame_time)

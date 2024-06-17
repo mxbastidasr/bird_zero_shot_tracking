@@ -1,4 +1,4 @@
-#python clip_object_tracker.py --weights models/yolov8x.pt --source "data/video/colibri_pause.mov" --detection-engine yolov8 --view-img --save-txt --overlap 0.1 --confidence 0.7
+#python clip_object_tracker.py --weights models/yolov8x.pt --source "data/video/hummingbird_hq_AdobeExpress.mp4" --detection-engine yolonas --save-txt --animate --clip-labels "hummingbird" "flower" "bird feeder" --animate_over iou
 #https://github.com/roboflow/zero-shot-object-tracking
 
 import argparse
@@ -32,6 +32,9 @@ import logging
 
 logging.getLogger("super_gradients").setLevel(logging.WARNING)
 
+import warnings
+warnings.filterwarnings("ignore")
+from tqdm import tqdm
 classes = []
 
 names = []
@@ -106,7 +109,7 @@ class DetectionAndTracking:
         if self.opt.detection_engine == "yolonas":
             _ = self.yolonas_engine.infer(img) if self.device.type != 'cpu' else None  # run once
 
-        for path, img, im0s, vid_cap in dataset:
+        for path, img, im0s, vid_cap in tqdm(dataset):
             
             p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
 
@@ -207,16 +210,18 @@ class DetectionAndTracking:
             base_path= os.path.join(save_dir, 'labels')
             if not os.path.isdir(base_path):
                 os.makedirs(base_path)
-
+            logging.info('calculating jaccard coefficient for consecutive frames')
             jaccard_df, pause_range = jaccard_consecutive_frames(save_dir,p.name, self.frames_detection_df, pause_th = self.opt.pause_th)
           
             self.frames_detection_df = self.frames_detection_df.merge(jaccard_df, how="outer", on=["frame", "track"])
             df_path = os.path.join(base_path, f'full_labels.csv')
             self.frames_detection_df.to_csv(df_path)
+            logging.info('Marking pauses on video')
             marking_pauses_on_video(source,self.vid_writer,self.frames_detection_df)
             if self.opt.animate:
+                logging.info('Creating animation')
                 save_animation = save_path.split('.')[0] + "_animation.mp4"
-                jaccard_animation(save_path, df_path,save_animation, pause_range)
+                jaccard_animation(save_path, df_path,save_animation, pause_range, animate_over=self.opt.animate_over)
             self.frames_detection_df = pd.DataFrame(columns=["frame", "track", "class", "bbox"])
 
            
@@ -317,9 +322,11 @@ if __name__ == '__main__':
     parser.add_argument("--detection-engine", default="yolov8", help="Which engine you want to use for object detection (yolov8.")
     parser.add_argument("--clip-labels", nargs='+', default=["hummingbird", "flower", "leaves", "feeder"])
     parser.add_argument('--pause_th', type=float,
-                        default=0.01, help='pause marking threshold')
+                        default=0.2, help='pause marking threshold, represents a percentage from the mean (mean - mean*pause_th)')
     parser.add_argument('--animate', action='store_true',
                         help='animate results')
+    parser.add_argument('--animate_over', type=str,
+                        default='iou', help='choose over which variable animate: iou or centroide')
     opt = parser.parse_args()
     print(opt)
    

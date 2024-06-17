@@ -16,7 +16,7 @@ class YoloNasEngine:
         self.agnostic_nms = agnostic_nms
 
     def infer(self, img):
-        pred =  list(self.model.predict(img,self.conf_thres))[0].prediction
+        pred =  list(self.model.predict(img,conf = self.conf_thres, iou = self.iou_thres))[0].prediction
         bboxes_xyxy = np.round(pred.bboxes_xyxy).astype(int)
         confidence = pred.confidence
         class_id = pred.labels.astype(int)
