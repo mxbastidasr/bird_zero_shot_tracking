@@ -101,35 +101,35 @@ def create_box_encoder(model, model_name = 'yolov8'):
         clf_dict = []
         img_features = []
         for box in boxes:
-            #print("extracting box {} from image {}".format(box, image.shape))
-            patch = extract_image_patch(image, box, model_name=model_name)
-            
-            if patch is None:
-                print("WARNING: Failed to extract image patch: %s." % str(box))
-                patch = np.random.uniform(
-                    0., 255., image.shape).astype(np.uint8)
+            try:
+                #print("extracting box {} from image {}".format(box, image.shape))
+                patch = extract_image_patch(image, box, model_name=model_name)
                 
-            clip_patch = model.img_preporcess_clip(patch)
+                if patch is None:
+                    print("WARNING: Failed to extract image patch: %s." % str(box))
+                    patch = np.random.uniform(
+                        0., 255., image.shape).astype(np.uint8)
+                    
+                clip_patch = model.img_preporcess_clip(patch)
 
-            img_emb = model.model.get_image_features(clip_patch).detach().cpu().numpy()
-            clas_scores = np.dot(img_emb, model.label_emb.T)/(np.linalg.norm(img_emb)*np.linalg.norm(model.label_emb.T))
+                img_emb = model.model.get_image_features(clip_patch).detach().cpu().numpy()
+                clas_scores = np.dot(img_emb, model.label_emb.T)/(np.linalg.norm(img_emb)*np.linalg.norm(model.label_emb.T))
+                
+                clas_pred = np.argmax(clas_scores)
             
-            clas_pred = np.argmax(clas_scores)
-           
-            img_emb = img_emb.squeeze()
-            if clas_pred ==0 and clas_scores[0][clas_pred] >= 0.1:
-                clf_dict.append({'label': model.labels[clas_pred],'score':clas_scores[0][clas_pred], 'img_features': img_emb })
-            elif clas_pred ==0 and clas_scores[0][clas_pred] < 0.1:
-                clf_dict.append({'label': model.labels[-1],'score':clas_scores[0][clas_pred], 'img_features': img_emb })
-            else:
-                clf_dict.append({'label': model.labels[clas_pred],'score':clas_scores[0][clas_pred], 'img_features': img_emb })
-
+                img_emb = img_emb.squeeze()
+                if clas_pred ==0 and clas_scores[0][clas_pred] >= 0.1:
+                    clf_dict.append({'label': model.labels[clas_pred],'score':clas_scores[0][clas_pred], 'img_features': img_emb })
+                elif clas_pred ==0 and clas_scores[0][clas_pred] < 0.1:
+                    clf_dict.append({'label': model.labels[-1],'score':clas_scores[0][clas_pred], 'img_features': img_emb })
+                else:
+                    clf_dict.append({'label': model.labels[clas_pred],'score':clas_scores[0][clas_pred], 'img_features': img_emb })
+            except:
+                pass
         img_features = np.array([x['img_features'] for x in clf_dict])
            
     
         return img_features, clf_dict
-    try:
-        return encoder
-    except:
-        pass
+    
+    return encoder
 
