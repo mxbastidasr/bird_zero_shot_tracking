@@ -128,6 +128,8 @@ def create_box_encoder(model, model_name = 'yolov8'):
            
     
         return img_features, clf_dict
-
-    return encoder
+    try:
+        return encoder
+    except:
+        pass
 
