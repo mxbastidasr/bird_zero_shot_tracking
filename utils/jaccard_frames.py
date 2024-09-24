@@ -56,8 +56,12 @@ def bb_intersection_over_union(boxA, boxB):
 
     # return the intersection over union value
     return iou
+def smooth(y, box_pts):
+    box = np.ones(box_pts)/box_pts
+    y_smooth = np.convolve(y, box, mode='same')
+    return y_smooth
 
-def jaccard_consecutive_frames(project_path, file_name, df, pause_th= 0.2):
+def jaccard_consecutive_frames(project_path, file_name, df, pause_th= 0.9):
     df = df[df['class'].isin(["hummingbird"])==True]
     df = df.reset_index(drop=True)
     tracks = list(np.unique(df['track'].values))
@@ -85,9 +89,27 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th= 0.2):
             jaccard_distance.append(iou_actual)
             if idx>=len(df_track)-2:
                 break
-    diff_iou = np.array(list(np.diff(np.array(jaccard_distance))) + [0])
-    mean = np.array(abs(np.array(diff_iou))).mean()
-    plat = [mean + 0.005 if 0 <= abs(value) <= mean - mean*pause_th else mean - 0.005 for value in diff_iou]
+    smoth_iou = smooth(np.array(jaccard_distance),3)
+    diff_iou = np.array(list(np.diff(smoth_iou)) + [0])
+
+    init_frame = 0
+    plat = []
+    jump_frame=60
+
+    for i in range(0, len(diff_iou), jump_frame):  # Step by 10
+        chunk = diff_iou[init_frame:init_frame+jump_frame]
+        
+        if len(chunk) < jump_frame:
+            # If the chunk has fewer than 10 elements, break the loop
+            break
+
+        mean = np.mean(np.abs(chunk))
+
+        plat += [0.5 if 0 <= abs(value) <= mean*pause_th else 0.0 for value in chunk]
+        
+        init_frame += jump_frame  # Move to the next set of 10 values
+
+
     res = []
     idx = 0
 
@@ -102,10 +124,8 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th= 0.2):
 
         # Appending in format [element, start, end position]
         res.append((val, strt_pos, end_pos))
-    pause_range = [(init, fin) for (value, init, fin) in res if (fin-init>=10) and (value==mean+0.005)]
-    pause = np.array([None for _ in range(len(plat))])
-    for (init, fin) in pause_range:
-        pause[init : fin] = 1
+    
+    
  
     jaccard_df=pd.DataFrame()
 
@@ -117,7 +137,17 @@ def jaccard_consecutive_frames(project_path, file_name, df, pause_th= 0.2):
     jaccard_df['cy'] = pd.Series(cy)
     jaccard_df['magnitude_centroid'] = pd.Series(magnitud_orig)
     jaccard_df['dy_magnitud'] = diff
+    # Check if the lengths are different
+    if len(plat) < len(jaccard_df):
+        # Pad the list with 0s to match the DataFrame length
+        plat.extend([0] * (len(jaccard_df) - len(plat)))
+
     jaccard_df['dy_platteau'] = plat
+
+    pause_range = [(init, fin) for (value, init, fin) in res if (fin-init>=10) and (value==0.5)]
+    pause = np.array([None for _ in range(len(plat))])
+    for (init, fin) in pause_range:
+        pause[init : fin] = 1
     jaccard_df['pause'] = pause
     
     for key, grp in jaccard_df.groupby(['track']):

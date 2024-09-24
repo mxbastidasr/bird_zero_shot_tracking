@@ -23,7 +23,7 @@ from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 import generate_clip_detections as gdet
 
-from utils.yolov8 import Yolov8Engine
+#from utils.yolov8 import Yolov8Engine
 from utils.yolonas import YoloNasEngine
 from clip_zero_shot_classifier import ClipClassifier
 from utils.jaccard_frames import get_color_for, jaccard_consecutive_frames, marking_pauses_on_video, jaccard_animation
@@ -322,7 +322,7 @@ if __name__ == '__main__':
     parser.add_argument("--detection-engine", default="yolov8", help="Which engine you want to use for object detection (yolov8.")
     parser.add_argument("--clip-labels", nargs='+', default=["hummingbird", "flower", "leaves", "feeder"])
     parser.add_argument('--pause_th', type=float,
-                        default=0.2, help='pause marking threshold, represents a percentage from the mean (mean - mean*pause_th)')
+                        default=0.9, help='pause marking threshold, represents a percentage from the mean (mean - mean*pause_th)')
     parser.add_argument('--animate', action='store_true',
                         help='animate results')
     parser.add_argument('--animate_over', type=str,
